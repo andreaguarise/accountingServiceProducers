@@ -3,6 +3,7 @@ require 'rubygems'
 require 'optparse'
 require 'active_resource'
 require 'json'
+require 'date'
 
 options = {}
 values = {}
@@ -27,7 +28,7 @@ class OpenNebulaJsonRecord
     #rv['cpuDuration'] = @jsonRecord["VM"]
     #rv['Disk'] = @jsonRecord['e']
     rv['diskImage'] = @jsonRecord["VM"]["TEMPLATE"]["DISK"]["IMAGE"]
-    rv['endTime'] = @jsonRecord["ETIME"]
+    rv['endTime'] = Time.at(@jsonRecord["ETIME"].to_i).to_datetime
     #rv['globaluserName'] = @jsonRecord["e"]
     rv['localVMID'] = @jsonRecord["VM"]["ID"]
     rv['local_group'] = @jsonRecord["VM"]["GNAME"]
@@ -37,11 +38,14 @@ class OpenNebulaJsonRecord
     rv['networkOutBound'] = @jsonRecord["VM"]["NET_TX"]
     #rv['networkType'] = @jsonRecord['q']
     #rv['resource_name'] = @resourceName
-    rv['startTime'] = @jsonRecord["STIME"]
-    #rv['status'] = @jsonRecord['t']
+    rv['startTime'] = Time.at(@jsonRecord["STIME"].to_i).to_datetime
+    rv['status'] = @jsonRecord['VM']['STATE'] + ":" + @jsonRecord['VM']['LCM_STATE']
     #rv['storageRecordId'] = @jsonRecord['u']
     #rv['suspendDuration'] = @jsonRecord['v']
-    #rv['wallDuration'] = @jsonRecord['z']
+    if @jsonRecord["ETIME"] == "0" then
+	@jsonRecord["ETIME"] = dateTime = Time.new.to_time.to_i
+    end
+    rv['wallDuration'] = @jsonRecord["ETIME"].to_i - @jsonRecord["STIME"].to_i
     rv
   end
   
@@ -49,6 +53,8 @@ class OpenNebulaJsonRecord
     stringVector = "VMUUID = " + self.recordVector['VMUUID'] + "\n"
     stringVector += "cloudType = " + self.recordVector['cloudType'] + "\n"
     stringVector += "cpuCount = " + self.recordVector['cpuCount'] + "\n"
+    stringVector += "startTime = " + self.recordVector['startTime'].to_s + "\n"
+    stringVector += "endTime = " + self.recordVector['endTime'].to_s + "\n"
   end
 
   #def resourceName=(resourceName)
@@ -113,18 +119,23 @@ CloudRecord.timeout = 5
     Thread.new {
       puts JSON.pretty_generate(jsonRecord)
       record = OpenNebulaJsonRecord.new(jsonRecord)
+      puts record.to_s
       r = CloudRecord.new(record.recordVector)
-      r.resource_name="hdesk-dev-21.to.infn.it"
+      if values['resource_name'] then
+        r.resource_name=values['resource_name']
+      else
+        r.resource_name=ENV["HOSTNAME"]
+      end
       tries = 0
       begin
         tries += 1
 	r.save
 	if not r.valid? 
           puts r.errors.full_messages
-	  recordBuff = CloudRecord.get(:searchid, :VMUUID => r.VMUUID )
+	  recordBuff = CloudRecord.get(:search, :VMUUID => r.VMUUID )
 	  newRecord = CloudRecord.find(recordBuff["id"])
 	  newRecord.load(r.attributes)
-	  newRecord.save  
+	  newRecord.save
 	end
 
       rescue Exception => e
