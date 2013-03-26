@@ -7,7 +7,7 @@ require 'json'
 options = {}
 values = {}
 class GenericResource < ActiveResource::Base
-  self.format = :json
+  self.format = :xml
 end
 
 class CloudRecord < GenericResource
@@ -28,7 +28,7 @@ class OpenNebulaJsonRecord
     #rv['Disk'] = @jsonRecord['e']
     rv['diskImage'] = @jsonRecord["VM"]["TEMPLATE"]["DISK"]["IMAGE"]
     rv['endTime'] = @jsonRecord["ETIME"]
-    #rv['globaluserName'] = @jsonRecord['h']
+    #rv['globaluserName'] = @jsonRecord["e"]
     rv['localVMID'] = @jsonRecord["VM"]["ID"]
     rv['local_group'] = @jsonRecord["VM"]["GNAME"]
     rv['local_user'] = @jsonRecord["VM"]["UNAME"]
@@ -113,18 +113,25 @@ CloudRecord.timeout = 5
     Thread.new {
       puts JSON.pretty_generate(jsonRecord)
       record = OpenNebulaJsonRecord.new(jsonRecord)
-      puts record
       r = CloudRecord.new(record.recordVector)
       r.resource_name="hdesk-dev-21.to.infn.it"
       tries = 0
       begin
         tries += 1
 	r.save
+	if not r.valid? 
+          puts r.errors.full_messages
+	  recordBuff = CloudRecord.get(:searchid, :VMUUID => r.VMUUID )
+	  newRecord = CloudRecord.find(recordBuff["id"])
+	  newRecord.load(r.attributes)
+	  newRecord.save  
+	end
+
       rescue Exception => e
         puts "Error sending  #{r.VMUUID}:#{e.to_s}. Retrying"
         if ( tries < 3)
           sleep(2**tries)
-        retry
+          retry
         end
       end
     }
@@ -140,7 +147,6 @@ CloudRecord.timeout = 5
   current = Thread.current
   all = Thread.list
   all.each { |t| t.join unless t == main }
-
 
 puts
 
