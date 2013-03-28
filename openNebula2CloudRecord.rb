@@ -54,17 +54,28 @@ class OpenNebulaJsonRecord
     rv['networkOutBound'] = @jsonRecord["VM"]["NET_TX"]
     #rv['networkType'] = @jsonRecord['q']
     #rv['resource_name'] = @resourceName
-    timeBuff = @jsonRecord["RSTIME"] if @jsonRecord["RSTIME"] != "0"
-    timeBuff = @jsonRecord["PSTIME"] if @jsonRecord["PSTIME"] != "0"
-    timeBuff = @jsonRecord["STIME"] if @jsonRecord["STIME"] != "0"
-    rv['startTime'] = Time.at(timeBuff.to_i).to_datetime
     rv['status'] = @jsonRecord['VM']['STATE'] + ":" + @jsonRecord['VM']['LCM_STATE']
     #rv['storageRecordId'] = @jsonRecord['u']
     #rv['suspendDuration'] = @jsonRecord['v']
-    if @jsonRecord["ETIME"] == "0" then
-	@jsonRecord["ETIME"] = dateTime = Time.new.to_time.to_i
-    end
-    rv['wallDuration'] = @jsonRecord["ETIME"].to_i - @jsonRecord["STIME"].to_i
+    
+    ## Compute endTime from the available information. use current date if none applies
+    endTimeBuff = Time.new.to_time.to_i
+    endTimeBuff = @jsonRecord["RETIME"] if @jsonRecord["RETIME"] != "0"
+    endTimeBuff = @jsonRecord["EETIME"] if @jsonRecord["EETIME"] != "0"
+    endTimeBuff = @jsonRecord["ETIME"] if @jsonRecord["ETIME"] != "0"
+    rv['endTime'] = Time.at(endTimeBuff.to_i).to_datetime
+    
+    ## Compute startTime from the available information. use endTime if none applies 
+    startTimeBuff = endTimeBuff
+    startTimeBuff = @jsonRecord["RSTIME"] if @jsonRecord["RSTIME"] != "0"
+    startTimeBuff = @jsonRecord["PSTIME"] if @jsonRecord["PSTIME"] != "0"
+    startTimeBuff = @jsonRecord["STIME"] if @jsonRecord["STIME"] != "0"
+    rv['startTime'] = Time.at(startTimeBuff.to_i).to_datetime
+    
+    ## wallDuration is by definition endTime - startTime
+    rv['wallDuration'] = rv['endTime'].to_i - rv['startTime'].to_i
+
+    ## VMUUID must be assured unique. 
     rv['VMUUID'] = @resourceName  + "-" + @jsonRecord["STIME"] + "-" +@jsonRecord["VM"]["ID"]
     rv
   end
