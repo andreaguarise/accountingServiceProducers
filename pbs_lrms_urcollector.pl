@@ -3,17 +3,134 @@
 use strict;
 
 use IO::Handle;
+use POSIX;
+use Sys::Syslog;
 
+# variables set up in configuration
 my $lrmsLogDir ="";
+my $collectorBufferFileName = "/tmp/collectorBuffer";
+my $systemLogLevel = 7;
+my $logType = 0;
+
+# global variables used internally.
+my $lastLog;
+my $logCounter = 0;
+my $keepGoing = 1;
+
+
+##-------> sig handlers subroutines <---------##
+
+sub sigINT_handler
+{
+	&printLog( 3, "got SIGINT" );
+	$keepGoing = 0;
+}
 
 sub error
 {
-	print "Error: $_[0]\n";
+	if ( scalar(@_) > 0 )
+	{
+		&printLog( 2, "$_[0]" );
+	}
 }
 
 sub printLog
 {
-	print "Log: $_[1]\n";
+	#my $logLevel = $_[0];
+	#my $log      = $_[1];
+	if ( $_[0] <= $systemLogLevel )
+	{
+		if ( $logType == 1 )
+		{
+			my $pri = "";
+		  SWITCH:
+			{
+				if ( $_[0] == 0 ) { $pri = 'crit';    last SWITCH; }
+				if ( $_[0] == 1 ) { $pri = 'err';     last SWITCH; }
+				if ( $_[0] == 2 ) { $pri = 'warning'; last SWITCH; }
+				if ( $_[0] == 3 ) { $pri = 'warning'; last SWITCH; }
+				if ( $_[0] == 4 ) { $pri = 'notice';  last SWITCH; }
+				if ( $_[0] == 5 ) { $pri = 'notice';  last SWITCH; }
+				if ( $_[0] == 6 ) { $pri = 'info';    last SWITCH; }
+				if ( $_[0] == 7 ) { $pri = 'info';    last SWITCH; }
+				if ( $_[0] == 8 ) { $pri = 'debug';   last SWITCH; }
+				if ( $_[0] == 9 ) { $pri = 'debug';   last SWITCH; }
+				my $nothing = 1;
+			}
+			syslog( $pri, $_[1] );
+		}
+		else
+		{
+			my $localtime = localtime();
+			if ( $_[1] ne $lastLog )
+			{
+				if ( $logCounter != 0 )
+				{
+					print LOGH
+					  "$localtime: Last message repeated $logCounter times.\n";
+				}
+				$logCounter = 0;
+				print LOGH "$localtime: " . $_[1] . "\n";
+			}
+			else
+			{
+				$logCounter++;
+				if ( $logCounter == 20 )
+				{
+					print LOGH "$localtime: Last message repeated 20 times.\n";
+					$logCounter = 0;
+				}
+			}
+			$lastLog = $_[1];
+		}
+	}
+}
+
+sub putBuffer
+{
+
+	# arguments are: 0 = buffer name
+	#                1 = last LRMS job id
+	#                2 = last LRMS job timestamp (log time)
+	my $buffName = $_[0];
+	
+	if ( $_[1] eq "" )
+	{
+		&printLog( 1, "ASSERT Write in Buffer $_[0]; EMPTY LRMS ID. Not Updating Buffer.", 1 );
+		return;
+	}
+	#open( OUT, "> $buffName" ) || return 2;
+	#print OUT "$_[1]:$_[2]\n";
+	#&printLog( 7, "Write in Buffer lrmsId:$_[1];timstamp:$_[2]", 1 );
+	#close(OUT);
+	open(TMP, ">", "$buffName.tmp") || return 2;
+	print TMP "$_[1]:$_[2]\n";
+	&printLog( 7, "Write in Buffer lrmsId:$_[1];timstamp:$_[2]", 1 );
+	close(TMP);
+	rename($buffName, "$buffName.ori");
+	rename("$buffName.tmp", $buffName);
+	return 0;
+}
+
+sub readBuffer
+{
+	my $buffname = $_[0];
+	open( IN, "< $buffname" ) || return 2;
+	my $lrmsid;
+	my $tstamp;
+	while (<IN>)
+	{
+		if ( $_ =~ /^(.*?):(.*?)$/ )
+		{
+			$lrmsid = $1;
+			$tstamp = $2;
+		}
+	}
+	close(IN);
+	&printLog( 8, "buffer: $buffname. First job: id=$lrmsid; timestamp=$tstamp" );
+	$_[1] = $lrmsid;
+	$_[2] = $tstamp;
+	return 0;
 }
 
 sub parseUR_pbs
@@ -105,6 +222,8 @@ sub parseUR_pbs
 	return %pbsRecord;
 }
 
+##  MAIN ##
+
 while (@ARGV)
 {
         $lrmsLogDir = shift @ARGV;
@@ -116,9 +235,22 @@ my (			$dev,   $ino,     $mode, $nlink, $uid,
 				$ctime, $blksize, $blocks
 			);    # these are dummies
 
+my $sigset    = POSIX::SigSet->new();
+
+my $actionInt =
+  POSIX::SigAction->new( "sigINT_handler", $sigset, &POSIX::SA_NODEFER );
+POSIX::sigaction( &POSIX::SIGINT,  $actionInt );
+POSIX::sigaction( &POSIX::SIGTERM, $actionInt );
+
 my $timeToWaitForNewEvents = 5;
-my $lastProcessedLrmsId = "15542.t2-ce-01.to.infn.it";
-my $lastProcessedDateTime = "04/21/2013 23:49:16";
+
+
+
+my $lastProcessedLrmsId;
+my $lastProcessedDateTime;
+
+&readBuffer( $collectorBufferFileName, $lastProcessedLrmsId, $lastProcessedDateTime );
+print "Starting from: $lastProcessedLrmsId:$lastProcessedDateTime\n";
 
 my @lrmsLogFiles;
 my %logFInodes = ();
@@ -147,13 +279,18 @@ opendir( DIR, $lrmsLogDir ) || &error("Error: can't open dir $lrmsLogDir: $!");
 		closedir DIR;
 
 my $canProcess = 0;
-while ( @sortedLrmsLogFiles )
+if ( ($lastProcessedDateTime eq "") && ($lastProcessedLrmsId eq "") )
+{
+	#Empty buffer: first run.
+	$canProcess = 1;
+}
+while ( @sortedLrmsLogFiles && $keepGoing)
 {
 		
 	my $thisLogFile = shift(@sortedLrmsLogFiles);
 	my $secsWaited = 0;
 	open(FH, "$lrmsLogDir/$thisLogFile") or die "Can't open file $thisLogFile: $!";
-	for(;;)
+	while( $keepGoing )
 	{
 		while (<FH>)
 		{
@@ -169,8 +306,9 @@ while ( @sortedLrmsLogFiles )
 				{ 
 					my %record = &parseUR_pbs($_);
 					print "$record{lrmsId}\n"; 
+					&putBuffer($collectorBufferFileName,$lrmsid,$date);
 				}
-				if ( ($date eq $lastProcessedDateTime ) && ($lrmsid eq $lastProcessedLrmsId) ) 
+				if ( ($date eq $lastProcessedDateTime ) && ($lrmsid eq $lastProcessedLrmsId) && ($event eq "E") ) 
 				{
 					$canProcess = 1;
 				}
@@ -188,6 +326,4 @@ while ( @sortedLrmsLogFiles )
 	}
 	close FH;
 }
-
-$canProcess = 0;
 
