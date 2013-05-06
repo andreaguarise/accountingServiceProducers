@@ -5,9 +5,12 @@ use strict;
 use IO::Handle;
 use POSIX;
 use Sys::Syslog;
+use DBI;
+use Time::HiRes qw(usleep ualarm gettimeofday tv_interval);
 
 # variables set up in configuration
 my $lrmsLogDir ="";
+my $database = "/tmp/collector.sqlite";
 my $collectorBufferFileName = "/tmp/collectorBuffer";
 my $systemLogLevel = 7;
 my $logType = 0;
@@ -222,6 +225,51 @@ sub parseUR_pbs
 	return %pbsRecord;
 }
 
+sub sqliteRecordInsert
+{
+	my $recordString = $_[1];
+	my $recorddate =$_[2];
+	my $lrmsid = $_[3];
+	
+	my $sqlStatement =
+"INSERT INTO records (key, lrmstype, record, recordDate, lrmsId, commandStatus) VALUES (NULL,'torque','$recordString','$recorddate', '$lrmsid',0)";
+			my $sth =
+			  $_[0]->prepare(
+"INSERT INTO records (key, lrmstype, record, recordDate, lrmsId, commandStatus) VALUES (NULL,'torque',?,?,?,0)"
+			  );
+			my $querySuccesfull = 1;
+			my $queryCounter    = 0;
+			while ( $querySuccesfull )
+			{
+				eval {
+					my $res =
+					  $sth->execute( $recordString, $recorddate,
+						$lrmsid );
+				};
+				if ($@)
+				{
+					&printLog( 3, "WARN: ($queryCounter) $@" );
+					print "Retrying in $queryCounter\n";
+					for (
+						my $i = 0 ;
+						$i < $queryCounter ;
+						$i++
+					  )
+					{
+						sleep $i;
+					}
+					$queryCounter++;
+				}
+				else
+				{
+					$querySuccesfull = 0;
+					&printLog( 9, "$sqlStatement" );
+				}
+				last if ( $queryCounter >= 10 );
+			}
+			return $querySuccesfull;
+}
+
 ##  MAIN ##
 
 while (@ARGV)
@@ -244,7 +292,15 @@ POSIX::sigaction( &POSIX::SIGTERM, $actionInt );
 
 my $timeToWaitForNewEvents = 5;
 
+my $sqlStatement =
+"CREATE TABLE IF NOT EXISTS records (key INTEGER PRIMARY KEY, lrmstype TEXT, record TEXT, recordDate TEXT, lrmsId TEXT, commandStatus INT)";
+my $sqliteCmd = "/usr/bin/sqlite3 $database \"$sqlStatement\"";
+my $status    = system("$sqliteCmd");
 
+my $dbh = DBI->connect("dbi:SQLite:$database")
+  || die "Cannot connect: $DBI::errstr";
+$dbh->{AutoCommit} = 1;    # disable transactions.
+$dbh->{RaiseError} = 1;
 
 my $lastProcessedLrmsId;
 my $lastProcessedDateTime;
@@ -284,6 +340,7 @@ if ( ($lastProcessedDateTime eq "") && ($lastProcessedLrmsId eq "") )
 	#Empty buffer: first run.
 	$canProcess = 1;
 }
+my $mainRecordsCounter = 0;
 while ( @sortedLrmsLogFiles && $keepGoing)
 {
 		
@@ -292,11 +349,14 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 	open(FH, "$lrmsLogDir/$thisLogFile") or die "Can't open file $thisLogFile: $!";
 	while( $keepGoing )
 	{
+		my $t1 = [gettimeofday];
+		my $date;
+		my $lrmsid;
 		while (<FH>)
 		{
-			my $date;
-			my $lrmsid;
+			
 			my $event;
+			my $record = $_;
 			if ( $_ =~ /^(.*);(.);(.*);(.*)$/ )
 			{
 				$date = $1;
@@ -304,13 +364,41 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 				$lrmsid = $3;
 				if ( $canProcess && ($event eq "E")) 
 				{ 
-					my %record = &parseUR_pbs($_);
-					print "$record{lrmsId}\n"; 
+					#my %record = &parseUR_pbs($_);
+					print "$lrmsid\n"; 
+					if ( &sqliteRecordInsert ($dbh, $record, $date, $lrmsid) != 0 )
+					{
+						exit 1;
+					}
 					&putBuffer($collectorBufferFileName,$lrmsid,$date);
+					$mainRecordsCounter += 1;
 				}
 				if ( ($date eq $lastProcessedDateTime ) && ($lrmsid eq $lastProcessedLrmsId) && ($event eq "E") ) 
 				{
 					$canProcess = 1;
+				}
+				my $elapsed      = tv_interval( $t1, [gettimeofday] );
+				my $jobs_min     = ( $mainRecordsCounter / $elapsed ) * 60;
+				my $min_krecords = 0.0;
+				if ( $jobs_min > 0 )
+				{
+					$min_krecords = 1000.0 / $jobs_min;
+				}
+				$jobs_min     = sprintf( "%.2f", $jobs_min );
+				$min_krecords = sprintf( "%.1f", $min_krecords );
+				#&printLog( 4,
+				#	"Processed: $mainRecordsCounter,Elapsed: $elapsed,Records/min:$jobs_min,min/KRec: $min_krecords"
+				#);
+				if ( $mainRecordsCounter >= 100 )
+				{
+					print "Processed: $mainRecordsCounter,Elapsed: $elapsed,Records/min:$jobs_min,min/KRec: $min_krecords\n";
+					if ( $keepGoing == 0 )
+					{
+						&putBuffer($collectorBufferFileName,$lrmsid,$date);
+						exit 0;
+					}
+					$mainRecordsCounter = 0;
+					$t1                 = [gettimeofday];
 				}
 			}
 		}
