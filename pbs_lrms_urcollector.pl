@@ -6,6 +6,7 @@ use IO::Handle;
 use POSIX;
 use Sys::Syslog;
 use DBI;
+use JSON;
 use Time::HiRes qw(usleep ualarm gettimeofday tv_interval);
 
 # variables set up in configuration
@@ -356,7 +357,6 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 		{
 			
 			my $event;
-			my $record = $_;
 			if ( $_ =~ /^(.*);(.);(.*);(.*)$/ )
 			{
 				$date = $1;
@@ -364,9 +364,10 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 				$lrmsid = $3;
 				if ( $canProcess && ($event eq "E")) 
 				{ 
-					#my %record = &parseUR_pbs($_);
+					my %record = &parseUR_pbs($_);
+					my $json_record = to_json(\%record);
 					print "$lrmsid\n"; 
-					if ( &sqliteRecordInsert ($dbh, $record, $date, $lrmsid) != 0 )
+					if ( &sqliteRecordInsert ($dbh, $json_record, $date, $lrmsid) != 0 )
 					{
 						exit 1;
 					}
