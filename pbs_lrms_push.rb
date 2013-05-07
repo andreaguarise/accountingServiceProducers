@@ -11,6 +11,8 @@ class GenericResource < ActiveResource::Base
   self.format = :xml
 end
 
+class TorqueExecuteRecord < GenericResource
+end
 
 class Record
   def initialize(row)
@@ -19,7 +21,25 @@ class Record
    
   def to_hash
     rh = {}
-    
+    rh['user'] = @row['user']
+    #rh[''] = @row['server']
+    rh['lrmsId'] = @row['lrmsId']
+    rh['queue'] = @row['queue']
+    rh['resourceUsed_cput'] = @row['cput']
+    rh['resourceused_walltime'] = @row['walltime']
+    rh['resourceUsed_vmem'] = @row['vmem']
+    rh['resourceUsed_mem'] = @row['mem']
+    #rh[''] = @row['processors']
+    rh['group'] = @row['group']
+    rh['jobName'] = @row['jobName']
+    rh['ctime'] = @row['ctime']
+    rh['qtime'] = @row['qtime']
+    rh['etime'] = @row['etime']
+    rh['start'] = @row['start']
+    rh['end'] = @row['end']
+    rh['execHost'] = @row['execHost']
+    rh['exitStatus'] = @row['exitStatus']
+    rh    
   end 
 end
 
@@ -70,8 +90,9 @@ stop = startstop['stop'].to_i
 while ( start < stop )
   rs = db.execute( "SELECT * FROM records WHERE key >= #{start} AND key < #{stop} ORDER by key LIMIT #{options[:number]}" )
   rs.each do |row|
-    record = JSON.parse(row['record'])
-    p "KEY: #{row["key"]},#{record["lrmsId"]}"
+    jsonRecord = JSON.parse(row['record'])
+    p "KEY: #{row["key"]},#{jsonRecord["lrmsId"]}"
+    recordBuff Record.new(jsonRecord)
   end
   start = start.to_i + options[:number].to_i;
 
