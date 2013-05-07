@@ -6,11 +6,10 @@ require 'json'
 require 'sqlite3'
 
 options = {}
-  
+
 class GenericResource < ActiveResource::Base
   self.format = :xml
 end
-
 
 opt_parser = OptionParser.new do |opt|
   opt.banner = "Usage: record_post [OPTIONS] field=value ..."
@@ -35,6 +34,11 @@ opt_parser = OptionParser.new do |opt|
     options[:database] = token
   end
 
+  options[:number] = nil
+  opt.on( '-n', '--number num', 'number of record treated per each iteration') do |token|
+    options[:number] = token
+  end
+
   opt.on( '-h', '--help', 'Print this screen') do
     puts opt
     exit
@@ -43,8 +47,21 @@ end
 
 opt_parser.parse!
 
+#open the database connection
 db = SQLite3::Database.new options[:database]
+db.results_as_hash = true;
 
-db.execute( "select * from records" ) do |row|
-  p row
+startstop = db.get_first_row("SELECT min(key) as start, max(key) as stop FROM records")
+start = startstop['start'].to_i
+stop = startstop['stop'].to_i
+
+while ( start < stop )
+  rs = db.execute( "SELECT * FROM records WHERE key >= #{start} AND key < #{stop} ORDER by key LIMIT #{options[:number]}" )
+  rs.each do |row|
+    record = JSON.parse(row['record'])
+    p "KEY: #{row["key"]},#{record["lrmsId"]}"
+  end
+  start = start.to_i + options[:number].to_i;
+
+
 end
