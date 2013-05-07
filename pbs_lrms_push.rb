@@ -11,6 +11,18 @@ class GenericResource < ActiveResource::Base
   self.format = :xml
 end
 
+
+class Record
+  def initialize(row)
+      @row = row
+  end
+   
+  def to_hash
+    rh = {}
+    
+  end 
+end
+
 opt_parser = OptionParser.new do |opt|
   opt.banner = "Usage: record_post [OPTIONS] field=value ..."
 
