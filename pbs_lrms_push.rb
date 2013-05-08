@@ -93,9 +93,12 @@ start = startstop['start'].to_i
 stop = startstop['stop'].to_i
 
 while ( start < stop )
+  begin_ = Time.now
+  numRecords = 0
   recordsDeletable = []
   rs = db.execute( "SELECT * FROM records WHERE key >= #{start} AND key < #{stop} ORDER by key LIMIT #{options[:number]}" )
   rs.each do |row|
+    numRecords += 1
     jsonRecord = JSON.parse(row['record'])
     p "KEY: #{row["key"]},#{jsonRecord["lrmsId"]}"
     recordBuff = Record.new(jsonRecord)
@@ -123,6 +126,7 @@ while ( start < stop )
     end
   end
   #DELETE the records which have been sent succesfully.
+  db.transaction
   recordsDeletable.each do |key|
     p "DELETE #{key}"
     begin
@@ -131,8 +135,11 @@ while ( start < stop )
       p "ERROR DELETING #{key}"
     end
   end
+  db.commit
   #update the start variable for next iteration.
   start = start.to_i + options[:number].to_i;
-
+  time = Time.now - begin_
+  recordsPerMin = (numRecords/Float(time))*60
+  printf "Records/min: %0.1f\n", recordsPerMin
 end
 
