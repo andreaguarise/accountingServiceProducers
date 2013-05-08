@@ -93,6 +93,7 @@ start = startstop['start'].to_i
 stop = startstop['stop'].to_i
 
 while ( start < stop )
+  recordsDeletable = []
   rs = db.execute( "SELECT * FROM records WHERE key >= #{start} AND key < #{stop} ORDER by key LIMIT #{options[:number]}" )
   rs.each do |row|
     jsonRecord = JSON.parse(row['record'])
@@ -105,12 +106,12 @@ while ( start < stop )
       r.save
       if not r.valid?
         puts r.errors.full_messages if options[:verbose]
-        #oldRecord = TorqueExecuteRecord.get(:search, :VMUUID => r.VMUUID )
-        #newRecord = TorqueExecuteRecord.find(oldRecord["id"])
-        #newRecord.load(r.attributes)
-        #newRecord.save
+        oldRecord = TorqueExecuteRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
+        newRecord = TorqueExecuteRecord.find(oldRecord["id"])
+        newRecord.load(r.attributes)
+        newRecord.save
       end
-
+      recordsDeletable << row["key"] 
     rescue Exception => e
       puts "Error sending  #{r.lrmsId}:#{e.to_s}. Retrying" if options[:verbose]
       if ( tries < 2)
@@ -121,6 +122,16 @@ while ( start < stop )
       end
     end
   end
+  #DELETE the records which have been sent succesfully.
+  recordsDeletable.each do |key|
+    p "DELETE #{key}"
+    begin
+      db.execute( "DELETE FROM records WHERE key = #{key}" )
+    rescue
+      p "ERROR DELETING #{key}"
+    end
+  end
+  #update the start variable for next iteration.
   start = start.to_i + options[:number].to_i;
 
 end
