@@ -4,6 +4,7 @@ use strict;
 
 use IO::Handle;
 use POSIX;
+use Getopt::Long;
 use Sys::Syslog;
 use DBI;
 use JSON;
@@ -20,6 +21,17 @@ my $logType = 0;
 my $lastLog;
 my $logCounter = 0;
 my $keepGoing = 1;
+my $dryrun;
+
+GetOptions(
+	'lrmsLog=s'    => \$lrmsLogDir,
+	'l=s'          => \$lrmsLogDir,
+	'database=s'   => \$database,
+	'd=s'          => \$database,
+	'bufferFile=s' => \$collectorBufferFileName,
+	'b=s'          => \$collectorBufferFileName,
+	"dryrun"  => \$dryrun
+);
 
 
 ##-------> sig handlers subroutines <---------##
@@ -314,6 +326,7 @@ my %logFInodes = ();
 my %logFSizes  = ();
 my %logFMod    = ();
 
+print "Using logs from $lrmsLogDir\n";
 
 opendir( DIR, $lrmsLogDir ) || &error("Error: can't open dir $lrmsLogDir: $!");
 		while ( defined( my $file = readdir(DIR) ) )
@@ -378,9 +391,14 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 				{
 					$canProcess = 1;
 				}
-				my $elapsed      = tv_interval( $t1, [gettimeofday] );
-				my $jobs_min     = ( $mainRecordsCounter / $elapsed ) * 60;
+				my $elapsed = 0;
+				my $jobs_min = 0;
 				my $min_krecords = 0.0;
+				my $elapsed      = tv_interval( $t1, [gettimeofday] );
+				if ( $elapsed > 0) 
+				{
+					$jobs_min     = ( $mainRecordsCounter / $elapsed ) * 60;
+				}
 				if ( $jobs_min > 0 )
 				{
 					$min_krecords = 1000.0 / $jobs_min;
