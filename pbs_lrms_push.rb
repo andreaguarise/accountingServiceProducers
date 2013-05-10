@@ -21,6 +21,7 @@ class Record
 
   def to_hash
     rh = {}
+    rh['recordDate'] = @row['recordDate']
     rh['user'] = @row['user']
     #rh[''] = @row['server']
     rh['lrmsId'] = @row['lrmsId']

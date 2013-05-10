@@ -29,7 +29,7 @@ class Record
     rh['recordDate'] = @row['timestamp']
     rh['timestamp'] = @row['timestamp']
     rh['userDN'] = @row['userDN']
-    h['userFQAN'] = @row['userFQAN']
+    rh['userFQAN'] = @row['userFQAN']
     rh
   end
 end
@@ -70,10 +70,10 @@ end
 
 opt_parser.parse!
 
-TorqueExecuteRecord.site = options[:uri]
-TorqueExecuteRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
-TorqueExecuteRecord.timeout = 5
-TorqueExecuteRecord.proxy = ""
+BlahRecord.site = options[:uri]
+BlahRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
+BlahRecord.timeout = 5
+BlahRecord.proxy = ""
 
 #open the database connection
 db = SQLite3::Database.new options[:database]
@@ -91,17 +91,17 @@ while ( start < stop )
   rs.each do |row|
     numRecords += 1
     jsonRecord = JSON.parse(row['record'])
-    p "KEY: #{row["key"]},#{jsonRecord["lrmsId"]}"
+    p "KEY: #{row["key"]},#{jsonRecord["lrmsID"]}"
     recordBuff = Record.new(jsonRecord)
-    r = TorqueExecuteRecord.new(recordBuff.to_hash)
+    r = BlahRecord.new(recordBuff.to_hash)
     tries = 0
     begin
       tries += 1
       r.save
       if not r.valid?
         puts r.errors.full_messages if options[:verbose]
-        oldRecord = TorqueExecuteRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
-        newRecord = TorqueExecuteRecord.find(oldRecord["id"])
+        oldRecord = BlahRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
+        newRecord = BlahRecord.find(oldRecord["id"])
         newRecord.load(r.attributes)
         newRecord.save
       end

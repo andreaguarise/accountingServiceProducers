@@ -154,7 +154,10 @@ sub parseUR_pbs
 	my %pbsRecord = ();
 	my $URString = $_[0];
 	&printLog( 8, "UR string:\n$URString" );
-
+    if ( $URString =~ /^(.*);(.);(.*);(.*)$/ )
+    {
+    	$pbsRecord{recordDate} = $1;
+    }
 	my @URArray  = split( ' ', $URString );
 	my @tmpArray = split( ';', $URArray[1] );
 	$_ = $tmpArray[3];
@@ -379,7 +382,7 @@ while ( @sortedLrmsLogFiles && $keepGoing)
 				{ 
 					my %record = &parseUR_pbs($_);
 					my $json_record = to_json(\%record);
-					print "$lrmsid\n"; 
+					print "$lrmsid:$date\n"; 
 					if ( &sqliteRecordInsert ($dbh, $json_record, $date, $lrmsid) != 0 )
 					{
 						exit 1;
