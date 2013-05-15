@@ -124,11 +124,11 @@ end
 publishers = {}
 
 TorqueExecuteRecord.site = options[:uri]
-TorqueExecuteRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
+#TorqueExecuteRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
 TorqueExecuteRecord.timeout = 5
 
 BlahRecord.site = options[:uri]
-BlahRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
+#BlahRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
 BlahRecord.timeout = 5
 #EmiComputeAccountingRecord.proxy = ""
 $stdout.sync = true
@@ -163,9 +163,15 @@ begin
 			  /^(.*):.*$/.match(row['gridResource'])
 			  current_publisher = $1
 			  if options[:publishers]
-			    publishers[current_publisher] = row['siteName'] if not publishers.include?(current_publisher)
+			    if row['voOrigin'] == 'map'
+			      current_publisher = "#{current_publisher}-local" 
+			      publishers[current_publisher] = row['siteName'] if not publishers.include?(current_publisher)
+			    else
+			      publishers[current_publisher] = row['siteName'] if not publishers.include?(current_publisher)
+			    end
 			  end	 
 			  if not options[:dryrun] 
+			    TorqueExecuteRecord.headers['Authorization'] = "Token token=\"#{tokens[current_publisher]}\""
 				  lrmsRecord = TorqueExecuteRecord.new(hlr_row.recordHashLRMS)
 				  tries = 0
 				  begin 	
@@ -178,16 +184,19 @@ begin
 						  retry
 					  end
 				  end
-				  blahRecord = BlahRecord.new(hlr_row.recordHashBlah)
-          tries = 0
-          begin   
-            tries += 1
-            blahRecord.save
-          rescue
-            puts "error sending BLAH: #{row['uniqueChecksum']}. Retrying"
-            if ( tries < 3)
-              sleep(2**tries)
-              retry
+				  if not row['voOrigin'] == 'map'
+				    BlahRecord.headers['Authorization'] = "Token token=\"#{tokens[current_publisher]}\""
+				    blahRecord = BlahRecord.new(hlr_row.recordHashBlah)
+            tries = 0
+            begin   
+              tries += 1
+              blahRecord.save
+            rescue
+              puts "error sending BLAH: #{row['uniqueChecksum']}. Retrying"
+              if ( tries < 3)
+                sleep(2**tries)
+                retry
+              end
             end
           end
         end
