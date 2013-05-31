@@ -151,7 +151,7 @@ begin
 		i = 0
 		rs.each_hash do |row|
 			i += 1
-			if i==10 then 
+			if i==100 then 
 				print "."
 				i = 0 
 			end

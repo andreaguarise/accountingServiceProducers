@@ -6,20 +6,35 @@ require 'json'
 require 'sqlite3'
 
 options = {}
-
+fakeUsers = [] #demo
+fakeQueues = [] #demo
 class GenericResource < ActiveResource::Base
   self.format = :xml
 end
 
-class TorqueExecuteRecord < GenericResource
+class BatchExecuteRecord < GenericResource
 end
 
 class Record
-  def initialize(row)
-      @row = row
+  def initialize(row,fakelocal,fakeusers,fakequeues)
+    @row = row
+    @fakelocal = fakelocal
+    @fakeusers = fakeusers
+    @fakequeues = fakequeues
   end
 
   def to_hash
+    #demo
+    if @fakelocal
+      user_group = @fakeusers.choice
+      user_group =~/(.*):(.*)/
+      data = Regexp.last_match
+      @row['user'] = data[1]
+      @row['group'] = data[2]
+      @row['queue'] = @fakequeues.choice
+      puts "#{@row['user']} - #{@row['group']} - #{@row['queue']}"
+    end
+    #demo end
     rh = {}
     rh['recordDate'] = @row['recordDate']
     rh['user'] = @row['user']
@@ -46,10 +61,31 @@ end
 
 opt_parser = OptionParser.new do |opt|
   opt.banner = "Usage: record_post [OPTIONS] field=value ..."
+  ###demo
+  options[:fakelocal] = false
+  opt.on( '-f', '--fakelocal', 'mangle record record of a grid farm to simulate a local one. Just for DEMO') do
+    options[:fakelocal] = true
+  end
 
+  options[:fakeQueues] = nil
+  opt.on( '-q', '--fakeQueues file', 'file containing the fake queues one queue per line') do |token|
+    options[:fakeQueues] = token
+  end
+
+  options[:fakeUsers] = nil
+  opt.on( '-u', '--fakeUsers file', 'file containing the fake queues user:group one per line') do |token|
+    options[:fakeUsers] = token
+  end
+
+  ###demo end
   options[:verbose] = false
   opt.on( '-v', '--verbose', 'Output more information') do
     options[:verbose] = true
+  end
+
+  options[:dryrun] = false
+  opt.on( '-D', '--dryrun', 'Do not actually send the records.') do
+    options[:dryrun] = true
   end
 
   options[:uri] = nil
@@ -80,10 +116,20 @@ end
 
 opt_parser.parse!
 
-TorqueExecuteRecord.site = options[:uri]
-TorqueExecuteRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
-TorqueExecuteRecord.timeout = 5
-TorqueExecuteRecord.proxy = ""
+BatchExecuteRecord.site = options[:uri]
+BatchExecuteRecord.headers['Authorization'] = "Token token=\"#{options[:token]}\""
+BatchExecuteRecord.timeout = 5
+BatchExecuteRecord.proxy = ""
+
+if options[:fakelocal]
+  File.open(options[:fakeUsers], "r").each_line do |line|
+    fakeUsers << line
+  end
+
+  File.open(options[:fakeQueues], "r").each_line do |line|
+    fakeQueues << line
+  end
+end
 
 #open the database connection
 db = SQLite3::Database.new options[:database]
@@ -102,25 +148,27 @@ while ( start < stop )
     numRecords += 1
     jsonRecord = JSON.parse(row['record'])
     p "KEY: #{row["key"]},#{jsonRecord["lrmsId"]}"
-    recordBuff = Record.new(jsonRecord)
-    r = TorqueExecuteRecord.new(recordBuff.to_hash)
+    recordBuff = Record.new(jsonRecord,options[:fakelocal],fakeUsers,fakeQueues)
+    r = BatchExecuteRecord.new(recordBuff.to_hash)
     tries = 0
     begin
       tries += 1
-      r.save
-      if not r.valid?
-        puts r.errors.full_messages if options[:verbose]
-        oldRecord = TorqueExecuteRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
-        newRecord = TorqueExecuteRecord.find(oldRecord["id"])
+      if not options[:dryrun]
+        r.save
+        if not r.valid?
+          puts r.errors.full_messages if options[:verbose]
+          oldRecord = BatchExecuteRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
+          newRecord = BatchExecuteRecord.find(oldRecord["id"])
         newRecord.load(r.attributes)
         newRecord.save
+        end
+        recordsDeletable << row["key"]
       end
-      recordsDeletable << row["key"] 
     rescue Exception => e
       puts "Error sending  #{r.lrmsId}:#{e.to_s}. Retrying" if options[:verbose]
       if ( tries < 2)
         sleep(2**tries)
-        retry
+      retry
       else
         puts "Could not send record #{r.lrmsId}."
       end
