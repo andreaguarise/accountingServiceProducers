@@ -27,17 +27,21 @@ class Record
     #demo
     if @fakelocal
       user_group = @fakeusers.choice
-      user_group =~/(.*):(.*)/
+      user_group =~/(.*):(.*):(.*)/
       data = Regexp.last_match
       @row['user'] = data[1]
       @row['group'] = data[2]
+      mult = data[3]
       @row['queue'] = @fakequeues.choice
+      @row['lrmsId'] = "#{@row['lrmsId']}.fk"
+      @row['cput'] = @row['cput']*mult
+      @row['walltime']= @row['walltime']*mult
       puts "#{@row['user']} - #{@row['group']} - #{@row['queue']}"
     end
     #demo end
     rh = {}
     rh['recordDate'] = @row['recordDate']
-    rh['user'] = @row['user']
+    rh['localUser'] = @row['user']
     #rh[''] = @row['server']
     rh['lrmsId'] = @row['lrmsId']
     rh['queue'] = @row['queue']
@@ -46,7 +50,7 @@ class Record
     rh['resourceUsed_vmem'] = @row['vmem']
     rh['resourceUsed_mem'] = @row['mem']
     #rh[''] = @row['processors']
-    rh['group'] = @row['group']
+    rh['localGroup'] = @row['group']
     rh['jobName'] = @row['jobName']
     rh['ctime'] = @row['ctime']
     rh['qtime'] = @row['qtime']
@@ -123,10 +127,12 @@ BatchExecuteRecord.proxy = ""
 
 if options[:fakelocal]
   File.open(options[:fakeUsers], "r").each_line do |line|
-    fakeUsers << line
+    line.chomp!
+    fakeUsers << "#{line}:#{rand}"
   end
 
   File.open(options[:fakeQueues], "r").each_line do |line|
+    line.chomp!
     fakeQueues << line
   end
 end

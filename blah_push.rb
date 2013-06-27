@@ -100,10 +100,11 @@ while ( start < stop )
       r.save
       if not r.valid?
         puts r.errors.full_messages if options[:verbose]
-        oldRecord = BlahRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
+        oldRecord = BlahRecord.get(:search, :lrmsId => r.lrmsId, :recordDate =>r.recordDate )
         newRecord = BlahRecord.find(oldRecord["id"])
         newRecord.load(r.attributes)
         newRecord.save
+        puts newRecord.errors.full_messages if options[:verbose]
       end
       recordsDeletable << row["key"] 
     rescue Exception => e
