@@ -29,8 +29,8 @@ class Record
       user_group = @fakeusers.choice
       user_group =~/(.*):(.*):(.*)/
       data = Regexp.last_match
-      @row['user'] = data[1]
-      @row['group'] = data[2]
+      @row['localUser'] = data[1]
+      @row['localGroup'] = data[2]
       mult = data[3]
       @row['queue'] = @fakequeues.choice
       @row['lrmsId'] = "#{@row['lrmsId']}.fk"
