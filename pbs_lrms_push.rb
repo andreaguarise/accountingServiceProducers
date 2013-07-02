@@ -82,6 +82,11 @@ opt_parser = OptionParser.new do |opt|
   end
 
   ###demo end
+  options[:update] = false
+  opt.on( '-P', '--update', 'enable PUT operation to update existing records') do
+    options[:update] = true
+  end
+  
   options[:verbose] = false
   opt.on( '-v', '--verbose', 'Output more information') do
     options[:verbose] = true
@@ -161,7 +166,7 @@ while ( start < stop )
       tries += 1
       if not options[:dryrun]
         r.save
-        if not r.valid?
+        if ( not r.valid? ) and ( options[:update] )
           puts r.errors.full_messages if options[:verbose]
           oldRecord = BatchExecuteRecord.get(:search, :lrmsId => r.lrmsId, :start =>r.start )
           newRecord = BatchExecuteRecord.find(oldRecord["id"])
