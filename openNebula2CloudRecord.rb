@@ -4,6 +4,7 @@ require 'optparse'
 require 'active_resource'
 require 'json'
 require 'date'
+require 'uuidtools'
 
 options = {}
 values = {}
@@ -77,7 +78,8 @@ class OpenNebulaJsonRecord
     rv['wallDuration'] = rv['endTime'].to_i - rv['startTime'].to_i
 
     ## VMUUID must be assured unique.
-    rv['VMUUID'] = @resourceName  + "-" + @jsonRecord["STIME"] + "-" +@jsonRecord["VM"]["ID"]
+    buffer = @resourceName  + "/" + @jsonRecord["STIME"] + "/" +@jsonRecord["VM"]["ID"]
+    rv['VMUUID'] = UUIDTools::UUID.md5_create(UUIDTools::UUID_DNS_NAMESPACE,buffer)
     rv
   end
 
