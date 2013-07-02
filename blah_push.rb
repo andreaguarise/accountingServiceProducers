@@ -37,6 +37,11 @@ end
 opt_parser = OptionParser.new do |opt|
   opt.banner = "Usage: record_post [OPTIONS] field=value ..."
 
+  options[:update] = false
+  opt.on( '-P', '--update', 'enable PUT operation to update existing records') do
+    options[:update] = true
+  end
+
   options[:verbose] = false
   opt.on( '-v', '--verbose', 'Output more information') do
     options[:verbose] = true
@@ -98,7 +103,7 @@ while ( start < stop )
     begin
       tries += 1
       r.save
-      if not r.valid?
+      if ( not r.valid? ) and ( options[:update] )
         puts r.errors.full_messages if options[:verbose]
         oldRecord = BlahRecord.get(:search, :lrmsId => r.lrmsId, :recordDate =>r.recordDate )
         newRecord = BlahRecord.find(oldRecord["id"])
