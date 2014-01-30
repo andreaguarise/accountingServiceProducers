@@ -7,6 +7,42 @@ require 'json'
 require 'dbi'
 
 class DatabaseRecord
+  def initialize(time,table)
+    @time = time
+    @table = table
+  end
+end
+
+class DatabaseRecordText < DatabaseRecord
+  
+  def get
+    "name:#{@name}\n
+    rows:#{@rows}\n
+    avg_row_length:#{@avg_row_length}\n
+    data_length:#{@data_length}\n
+    index_length:#{@index_length}"
+  end
+end
+
+class DatabaseRecordJSON < DatabaseRecord
+  
+  def get
+    record = @table.to_hash
+    record["time"]= @time
+    record.to_json
+  end
+  
+end
+
+class DatabaseRecordXML < DatabaseRecord
+  
+end
+
+class DatabaseRecordActiveResource < DatabaseRecord
+  
+end
+
+class DatabaseRecordActiveRecord < DatabaseRecord
   
 end
 
@@ -16,18 +52,19 @@ class Table
     @rows = 0 #number of rows
     @avg_row_length = 0 #set in bytes, avg bytes per row
     @data_length = 0 #set in bytes, data file dimensions
+    @index_length = 0 #set in bytes, index file dimensons
   end
   
-  def to_s
-    "name:#{@name}|rows:#{@rows}|avg_row_length:#{@avg_row_length}|data_length:#{@data_length}"
+  #def to_s
+  #  "name:#{@name}|rows:#{@rows}|avg_row_length:#{@avg_row_length}|data_length:#{@data_length}|index_length:#{@index_length}"
+  #end
+  
+  def to_hash
+    Hash[instance_variables.map { |var| [var[1..-1].to_sym, instance_variable_get(var)] }]
   end
   
   def rows=(rows)
     @rows = rows
-  end
-  
-  def rows
-    @rows
   end
   
   def avg_row_length=(a)
@@ -37,11 +74,16 @@ class Table
   def data_length=(d)
     @data_length=d
   end
+  
+  def index_length=(i)
+    @index_length=i
+  end
     
 end
 
 class Database
   def initialize(dbContactString,user,password)
+    @tables = Array.new
     @dbContactString = dbContactString
     pattern = /^(.*):(.*):(.*)$/
     pattern =~ dbContactString
@@ -75,6 +117,11 @@ class Database
   def getTables
     @dbh.tables
   end
+  
+  def tables
+    @tables
+  end
+  
 end
 
 class MySQL < Database
@@ -85,16 +132,17 @@ class MySQL < Database
      row[0]
   end
   
-  def getTableInfo
+  def getTableStatus
      result = @dbh.select_all("SHOW TABLE STATUS IN #{@dbName}")
      result.each do |row|
        t = Table.new(row[0])
        t.rows=row[4]
        t.avg_row_length=row[5]
        t.data_length=row[6]
-       puts t.to_s
+       t.index_length=row[8]
+       @tables << t
      end
-     #table = new Table(t)
+     @tables
   end
   
   
@@ -171,11 +219,11 @@ class DatabaseSensor
     end     
     db.connect
     puts db.getVersion
-    db.getTables.each do |table|
-      puts table
+    tables = db.getTableStatus
+    tables.each do |table|
+      r = DatabaseRecordJSON.new("12345678",table)
+      puts r.get
     end
-    db.getTableInfo
     db.disconnect
-    puts db.to_s
   end
 end
