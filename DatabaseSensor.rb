@@ -6,27 +6,34 @@ require 'active_resource'
 require 'json'
 require 'dbi'
 
-class DatabaseRecord
-  def initialize(time,table)
+class GenericResource < ActiveResource::Base
+  self.format = :xml
+end
+
+class DatabaseTable < GenericResource
+end
+
+class DatabaseRecord < GenericResource
+end 
+
+class LocalDatabaseRecord
+  def initialize(time,table,schema)
     @time = time
     @table = table
+    @schema = schema
   end
 end
 
-class DatabaseRecordText < DatabaseRecord
+class DatabaseRecordText < LocalDatabaseRecord
   
-  def get
-    "name:#{@name}\n
-    rows:#{@rows}\n
-    avg_row_length:#{@avg_row_length}\n
-    data_length:#{@data_length}\n
-    index_length:#{@index_length}"
+  def post
+    "name:#{@table.name}\nrows:#{@table.rows}\navg_row_length:#{@table.avg_row_length}\ndata_length:#{@table.data_length}\nindex_length:#{@table.index_length}"
   end
 end
 
-class DatabaseRecordJSON < DatabaseRecord
+class DatabaseRecordJSON < LocalDatabaseRecord
   
-  def get
+  def post
     record = @table.to_hash
     record["time"]= @time
     record.to_json
@@ -34,15 +41,31 @@ class DatabaseRecordJSON < DatabaseRecord
   
 end
 
-class DatabaseRecordXML < DatabaseRecord
+class DatabaseRecordXML < LocalDatabaseRecord
   
 end
 
-class DatabaseRecordActiveResource < DatabaseRecord
+class DatabaseRecordActiveResource < LocalDatabaseRecord
+  
+  def to_hash
+    rh = {}
+    rh['schema'] = @schema
+    rh['table'] = @table.name
+    rh['indexsize'] = @table.index_length
+    rh['rows'] = @table.rows
+    rh['tablesize'] = @table.data_length
+    rh['time'] = @time
+    rh 
+  end
+  
+  def post
+    r = DatabaseRecord.new(self.to_hash)
+    r.save
+  end
   
 end
 
-class DatabaseRecordActiveRecord < DatabaseRecord
+class DatabaseResource < GenericResource
   
 end
 
@@ -66,6 +89,12 @@ class Table
   def rows=(rows)
     @rows = rows
   end
+  
+  def rows; @rows; end
+  def name; @name; end
+  def avg_row_length; @avg_row_length; end
+  def data_length; @data_length; end
+  def index_length; @index_length; end
   
   def avg_row_length=(a)
     @avg_row_length=a
@@ -112,6 +141,10 @@ class Database
   
   def disconnect 
     @dbh.disconnect if @dbh
+  end
+  
+  def dbName
+    @dbName
   end
   
   def getTables
@@ -183,6 +216,11 @@ class DatabaseSensor
         @options[:uri] = uri
       end
       
+      @options[:uri] = nil
+      opt.on( '-P', '--Publisher type', 'Publisher type') do |type|
+        @options[:publisher_type] = type  
+      end
+      
       @options[:db] = nil
       opt.on( '-D', '--Database database', 'Database to contact') do |db|
         @options[:db] = db
@@ -207,6 +245,23 @@ class DatabaseSensor
     "MySQL"
   end
   
+  def newPublisher(time,table,dbName)
+    r = case
+    when @options[:publisher_type] == "JSON" then
+      DatabaseRecordJSON.new(time.to_i,table,dbName)
+    when @options[:publisher_type] == "text" then
+      DatabaseRecordText.new(time.to_i,table,dbName)
+    when @options[:publisher_type] == "ActiveResource" then
+      DatabaseRecord.site = @options[:uri]
+      DatabaseRecord.headers['Authorization'] = "Token token=\"#{@options[:token]}\""
+      DatabaseRecord.timeout = 5
+      DatabaseRecord.proxy = ""
+      DatabaseRecordActiveResource.new(time.to_i,table,dbName)
+    else
+        nil
+    end
+  end
+  
   def main
     self.getLineParameters
     db = case
@@ -219,10 +274,12 @@ class DatabaseSensor
     end     
     db.connect
     puts db.getVersion
+    puts db.dbName
     tables = db.getTableStatus
+    currentTime = Time.now
     tables.each do |table|
-      r = DatabaseRecordJSON.new("12345678",table)
-      puts r.get
+      r = newPublisher(currentTime,table,db.dbName)
+      puts r.post
     end
     db.disconnect
   end
