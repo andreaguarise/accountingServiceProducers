@@ -17,50 +17,110 @@ class DatabaseRecord < GenericResource
 end 
 
 class LocalDatabaseRecord
-  def initialize(time,table,schema)
+  def initialize(time,tables,schema)
     @time = time
-    @table = table
+    @tables = tables
     @schema = schema
   end
 end
 
 class DatabaseRecordText < LocalDatabaseRecord
+  @@written = 0
+  
+  def print(table)
+    "schema:#{@schema}\ntable:#{table.name}\nrows:#{table.rows}\navg_row_length:#{table.avg_row_length}\ndata_length:#{table.data_length}\nindex_length:#{table.index_length}"
+  end
   
   def post
-    "name:#{@table.name}\nrows:#{@table.rows}\navg_row_length:#{@table.avg_row_length}\ndata_length:#{@table.data_length}\nindex_length:#{@table.index_length}"
+    @tables.each do |table|
+      puts print(table)
+    end
   end
+  
+end
+
+class DatabaseRecordTextFile < LocalDatabaseRecord
+  @@written = 0
+  @@files = 0
+  def print(table)
+    "schema:#{@schema}\ntable:#{table.name}\nrows:#{table.rows}\navg_row_length:#{table.avg_row_length}\ndata_length:#{table.data_length}\nindex_length:#{table.index_length}\n"
+  end
+  
+  def post 
+    baseFileName= 10000000
+    while not @tables.empty?
+      @@written = 0
+      out = File.new("#{@dir}/#{(baseFileName+@@files).to_s}","w")
+      
+      if out
+        while ( @@written < @limit)
+          break if @tables.empty?
+          table = @tables.pop
+          puts table
+          out.syswrite(print(table))
+          @@written += 1
+        end
+      else
+        puts "Could not open file!"
+        exit
+      end 
+      @@files +=1
+      out.close
+    end
+  end
+  
+  def dir=(dir)
+    @dir = dir
+  end
+  
+  def limit=(limit)
+    @limit = limit
+  end
+  
 end
 
 class DatabaseRecordJSON < LocalDatabaseRecord
   
   def post
-    record = @table.to_hash
-    record["time"]= @time
-    record.to_json
+    @tables.each do |table|
+      record = table.to_hash
+      record["time"]= @time
+      record["schema"]= @schema
+      puts record.to_json
+    end
   end
   
 end
 
 class DatabaseRecordXML < LocalDatabaseRecord
-  
+  def post
+    @tables.each do |table|
+      record = table.to_hash
+      record["time"]= @time
+      record["schema"]= @schema
+      puts record.to_xml
+    end
+  end
 end
 
 class DatabaseRecordActiveResource < LocalDatabaseRecord
   
-  def to_hash
+  def to_hash(table)
     rh = {}
     rh['schema'] = @schema
-    rh['table'] = @table.name
-    rh['indexsize'] = @table.index_length
-    rh['rows'] = @table.rows
-    rh['tablesize'] = @table.data_length
+    rh['table'] = table.name
+    rh['indexsize'] = table.index_length
+    rh['rows'] = table.rows
+    rh['tablesize'] = table.data_length
     rh['time'] = @time
     rh 
   end
   
   def post
-    r = DatabaseRecord.new(self.to_hash)
-    r.save
+    @tables.each do |table|
+      r = DatabaseRecord.new(to_hash(table))
+      r.save
+    end
   end
   
 end
@@ -77,10 +137,6 @@ class Table
     @data_length = 0 #set in bytes, data file dimensions
     @index_length = 0 #set in bytes, index file dimensons
   end
-  
-  #def to_s
-  #  "name:#{@name}|rows:#{@rows}|avg_row_length:#{@avg_row_length}|data_length:#{@data_length}|index_length:#{@index_length}"
-  #end
   
   def to_hash
     Hash[instance_variables.map { |var| [var[1..-1].to_sym, instance_variable_get(var)] }]
@@ -177,8 +233,7 @@ class MySQL < Database
      end
      @tables
   end
-  
-  
+    
 end
 
 class DatabaseSensor
@@ -245,22 +300,30 @@ class DatabaseSensor
     "MySQL"
   end
   
-  def newPublisher(time,table,dbName)
+  def newPublisher(time,tables,dbName)
     r = case
     when @options[:publisher_type] == "JSON" then
-      DatabaseRecordJSON.new(time.to_i,table,dbName)
+      p = DatabaseRecordJSON.new(time.to_i,tables,dbName)
+      when @options[:publisher_type] == "XML" then
+      p = DatabaseRecordXML.new(time.to_i,tables,dbName)
     when @options[:publisher_type] == "text" then
-      DatabaseRecordText.new(time.to_i,table,dbName)
+      p = DatabaseRecordText.new(time.to_i,tables,dbName)
+    when @options[:publisher_type] == "textfile" then
+      p = DatabaseRecordTextFile.new(time.to_i,tables,dbName)
+      p.limit = 3
+      p.dir = "/tmp/"
     when @options[:publisher_type] == "ActiveResource" then
       DatabaseRecord.site = @options[:uri]
       DatabaseRecord.headers['Authorization'] = "Token token=\"#{@options[:token]}\""
       DatabaseRecord.timeout = 5
       DatabaseRecord.proxy = ""
-      DatabaseRecordActiveResource.new(time.to_i,table,dbName)
+      p = DatabaseRecordActiveResource.new(time.to_i,tables,dbName)
     else
-        nil
+      p =  nil
     end
+    p
   end
+  
   
   def main
     self.getLineParameters
@@ -277,10 +340,8 @@ class DatabaseSensor
     puts db.dbName
     tables = db.getTableStatus
     currentTime = Time.now
-    tables.each do |table|
-      r = newPublisher(currentTime,table,db.dbName)
-      puts r.post
-    end
+    r = newPublisher(currentTime,tables,db.dbName)
+    r.post
     db.disconnect
   end
 end
