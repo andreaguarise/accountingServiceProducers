@@ -12,9 +12,30 @@ class GenericResource < ActiveResource::Base
 end
 
 
+class LocalRecord
+  def initialize(records)
+    @records = records
+  end
+end
+
+class OneRecordSSM < LocalRecord
+  
+  def print(record)
+    "A"
+  end
+  
+  def post
+    @records.each do |record|
+      puts print(record)
+    end
+  end
+  
+end
+
 class OneacctFile
-  def initialize(file)
+  def initialize(file,resourceName)
     @file = file
+    @resourceName = resourceName
   end
   
   def parse
@@ -22,7 +43,7 @@ class OneacctFile
     parsed = JSON.parse IO.read(@file)
     parsed["HISTORY_RECORDS"]["HISTORY"].each do |jsonRecord|
       record = OpenNebulaJsonRecord.new(jsonRecord)
-      record.resourceName = "Test"
+      record.resourceName = @resourceName
       records << record.recordVector
     end
     records
@@ -138,6 +159,21 @@ class OpennebulaSensor
         @options[:uri] = uri
       end
       
+      @options[:resourceName] = nil
+      opt.on( '-r', '--resourceName resourceName', 'Name of resource, e.g. BDII siteName') do |resourceName|
+        @options[:resourceName] = resourceName
+      end
+      
+      @options[:uri] = nil
+      opt.on( '-d', '--dir dir', 'outpudDir for ssm files') do |outDir|
+        @options[:outputDir] = outDir
+      end
+      
+      @options[:limit] = nil
+      opt.on( '-L', '--Limit limit', 'number of record per outpu file') do |limit|
+        @options[:limit] = limit
+      end
+      
       @options[:uri] = nil
       opt.on( '-P', '--Publisher type', 'Publisher type') do |type|
         @options[:publisher_type] = type  
@@ -170,11 +206,11 @@ class OpennebulaSensor
     when @options[:publisher_type] == "XML" then
       p = OneRecordXML.new(records)
     when @options[:publisher_type] == "ssm" then
-      p = OneRecordText.new(records)
+      p = OneRecordSSM.new(records)
     when @options[:publisher_type] == "ssmfile" then
-      p = OneRecordTextFile.new(records)
-      p.limit = 1000
-      p.dir = "/tmp/"
+      p = OneRecordSSMFile.new(records)
+      p.limit = @options[:limit]
+      p.dir = @options[:outputDir]
     #when @options[:publisher_type] == "ActiveResource" then
     #  OneRecord.site = @options[:uri]
     #  OneRecord.headers['Authorization'] = "Token token=\"#{@options[:token]}\""
@@ -190,13 +226,12 @@ class OpennebulaSensor
   
   def main
     self.getLineParameters
-    f = OneacctFile.new(@options[:file])
+    f = OneacctFile.new(@options[:file],@options[:resourceName])
     records = f.parse
     p = newPublisher(records)
     #records.each do |r|
     #  puts "==== #{r} ===="
     #end  
-    r = newPublisher(records)
-    r.post
+    p.post
   end
 end
