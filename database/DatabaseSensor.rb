@@ -43,7 +43,7 @@ class DatabaseRecordTextFile < LocalDatabaseRecord
   @@written = 0
   @@files = 0
   def print(table)
-    "schema:#{@schema}\ntable:#{table.name}\nrows:#{table.rows}\navg_row_length:#{table.avg_row_length}\ndata_length:#{table.data_length}\nindex_length:#{table.index_length}\n"
+    "schema:#{@schema}\ntable:#{table.name}\nrows:#{table.rows}\navg_row_length:#{table.avg_row_length}\ndata_length:#{table.data_length}\nindex_length:#{table.index_length}\n%%\n"
   end
   
   def post 
