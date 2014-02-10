@@ -21,7 +21,28 @@ end
 class OneRecordSSM < LocalRecord
   
   def print(record)
-    "A"
+    "VMUUID: " + record['VMUUID'] + "\n" +
+    #"SiteName: " + + "\n" +
+    "MachineName: " + record['localVMID'] + "\n" +
+    "LocalUserId: " + record['local_user'] + "\n" +
+    "LocalGroupId: " + record['local_group'] + "\n" +
+    "GlobaUserName: " + "" + "\n" +
+    "FQAN: " + "" + "\n" +
+    "Status: " + record['statusLiteral']+ "\n" + ##FIXME Need status table opennebula --> apel
+    "StarTime: " + record['startTime'].to_i.to_s + "\n" +
+    "EndTime: " + record['endTime'].to_i.to_s + "\n" + #FIXME set in ssm record just if status == completed
+    "SuspendDuration: " + "" + "\n" +
+    "WallDuration: " + record['wallDuration'].to_i.to_s + "\n" +
+    "CpuDuration: " +  record['cpuDuration'].to_i.to_s + "\n" + #Check validity of this number! It is inferred from percentage of CPU consupmption
+    "CpuCount: " + record['cpuCount'] + "\n" +
+    "NetworkType: " + "" + "\n" +
+    "NetworkInbound: " + record['networkInbound'] + "\n" +
+    "NetworkOutbound: " + record['networkOutbound'] + "\n" +
+    "Memory: " + record['memory'] + "\n" +
+    "Disk: " + "" + "\n" +
+    "StorageRecordId: " + "" + "\n" +
+    "ImageId: " + record['diskImage'] + "\n" +
+    "CloudType: " + "OpenNebula" + "\n" + "%%"
   end
   
   def post
@@ -48,6 +69,52 @@ class OneacctFile
     end
     records
   end
+  
+end
+
+class OpenNebulaStatus
+  def initialize(state,lcm_state)
+    @state = state
+    @lcm_state = lcm_state
+    @state_ary = ['INIT','PENDING','HOLD','ACTIVE','STOPPED','SUSPENDED','DONE','FAILED','POWEROFF','UNDEFINED1','UNDEFINED2']
+    @lcmstate_ary = ['LCM_INIT',
+      'PROLOG',
+      'BOOT',
+      'RUNNING',
+      'MIGRATE',
+      'SAVE_STOP',
+      'SAVE_SUSPEND',
+      'SAVE_MIGRATE',
+      'PROLOG_MIGRATE',
+      'PROLOG_RESUME',
+      'EPILOG_STOP',
+      'EPILOG',
+      'SHUTDOWN',
+      'CANCEL',
+      'FAILURE',
+      'CLEANUP',
+      'UNKNOWN',
+      'HOTPLUG',
+      'SHUTDOWN_POWEROFF',
+      'BOOT_UNKNOWN',
+      'BOOT_POWEROFF',
+      'BOOT_SUSPENDED',
+      'BOOT_STOPPED',
+      'LCMUNDEFINED1',
+      'LCMUNDEFINED2',
+      'LCMUNDEFINED3',
+      'LCMUNDEFINED4']
+  end
+  
+  def to_s
+    if (@state != '3')
+      "#{@state_ary[@state.to_i]}"
+    else
+      "#{@lcmstate_ary[@lcm_state.to_i]}"
+    end  
+  end
+  
+  
   
 end
 
@@ -88,30 +155,34 @@ class OpenNebulaJsonRecord
     rv['local_user'] = @jsonRecord["VM"]["UNAME"]
     rv['memory'] = @jsonRecord["VM"]["TEMPLATE"]["MEMORY"]
     rv['networkInbound'] = @jsonRecord["VM"]["NET_RX"]
-    rv['networkOutBound'] = @jsonRecord["VM"]["NET_TX"]
+    rv['networkOutbound'] = @jsonRecord["VM"]["NET_TX"]
+    rv['cpuPercentage'] = @jsonRecord["VM"]["CPU"]#<!-- Percentage of 1 CPU consumed (two fully consumed cpu is 200) -->
+    rv['cpuPercentageNormalized'] = rv['cpuPercentage'].to_f/(100.0*rv['cpuCount'].to_f)
     #rv['networkType'] = @jsonRecord['q']
     #rv['resource_name'] = @resourceName
     rv['status'] = @jsonRecord['VM']['STATE'] + ":" + @jsonRecord['VM']['LCM_STATE']
+    state = OpenNebulaStatus.new(@jsonRecord['VM']['STATE'],@jsonRecord['VM']['LCM_STATE'])
+    rv['statusLiteral'] = state.to_s
     #rv['storageRecordId'] = @jsonRecord['u']
     #rv['suspendDuration'] = @jsonRecord['v']
 
     ## Compute endTime from the available information. use current date if none applies
     endTimeBuff = Time.new.to_time.to_i
-    endTimeBuff = @jsonRecord["RETIME"] if @jsonRecord["RETIME"] != "0"
-    endTimeBuff = @jsonRecord["EETIME"] if @jsonRecord["EETIME"] != "0"
+    endTimeBuff = @jsonRecord["RETIME"] if @jsonRecord["RETIME"] != "0" #RUNNING_ENDTIME
+    endTimeBuff = @jsonRecord["EETIME"] if @jsonRecord["EETIME"] != "0" #EPILOG_ENDTIME
     endTimeBuff = @jsonRecord["ETIME"] if @jsonRecord["ETIME"] != "0"
     rv['endTime'] = Time.at(endTimeBuff.to_i).to_datetime
 
     ## Compute startTime from the available information. use endTime if none applies
     startTimeBuff = endTimeBuff
-    startTimeBuff = @jsonRecord["RSTIME"] if @jsonRecord["RSTIME"] != "0"
-    startTimeBuff = @jsonRecord["PSTIME"] if @jsonRecord["PSTIME"] != "0"
+    startTimeBuff = @jsonRecord["RSTIME"] if @jsonRecord["RSTIME"] != "0" #RUNNING_STARTTIME
+    startTimeBuff = @jsonRecord["PSTIME"] if @jsonRecord["PSTIME"] != "0" #PROLOG_STARTTIME
     startTimeBuff = @jsonRecord["STIME"] if @jsonRecord["STIME"] != "0"
     rv['startTime'] = Time.at(startTimeBuff.to_i).to_datetime
 
     ## wallDuration is by definition endTime - startTime
     rv['wallDuration'] = rv['endTime'].to_i - rv['startTime'].to_i
-
+    rv['cpuDuration'] = rv['wallDuration'].to_f*rv['cpuPercentageNormalized']
     ## VMUUID must be assured unique.
     buffer = @resourceName  + "/" + @jsonRecord["STIME"] + "/" +@jsonRecord["VM"]["ID"]
     rv['VMUUID'] = UUIDTools::UUID.md5_create(UUIDTools::UUID_DNS_NAMESPACE,buffer)
