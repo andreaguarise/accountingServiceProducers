@@ -42,12 +42,62 @@ class OneRecordSSM < LocalRecord
     "Disk: " + "" + "\n" +
     "StorageRecordId: " + "" + "\n" +
     "ImageId: " + record['diskImage'] + "\n" +
-    "CloudType: " + "OpenNebula" + "\n" + "%%"
+    "CloudType: " + "OpenNebula" + "\n" + "%%\n"
   end
+  
   
   def post
     @records.each do |record|
       puts print(record)
+    end
+  end
+  
+end
+
+class OneRecordSSMFile < OneRecordSSM
+  
+  @@written = 0
+  @@files = 0
+  def dir=(dir)
+    @dir = dir
+  end
+  
+  def limit=(limit)
+    @limit = limit
+  end
+  
+  def RandomExa(length, chars = 'abcdef0123456789')
+        rnd_str = ''
+        length.times { rnd_str << chars[rand(chars.size)] }
+        rnd_str
+    end
+  
+  def generateFileName
+    time = Time.now.to_i
+    timeHex = time.to_s(16)
+    random_string = RandomExa(6)
+    filename = timeHex + random_string
+    filename
+
+  end
+  
+  def post 
+    while not @records.empty?
+      @@written = 0
+      out = File.new("#{@dir}/#{self.generateFileName}","w")
+      if out
+        while ( @@written < @limit.to_i)
+          break if @records.empty?
+          record = @records.pop
+          out.syswrite(print(record))
+          @@written += 1
+        end
+      else
+        puts "Could not open file!"
+        exit
+      end 
+      @@files +=1
+      out.close
     end
   end
   
@@ -294,15 +344,11 @@ class OpennebulaSensor
     p
   end
   
-  
   def main
     self.getLineParameters
     f = OneacctFile.new(@options[:file],@options[:resourceName])
     records = f.parse
     p = newPublisher(records)
-    #records.each do |r|
-    #  puts "==== #{r} ===="
-    #end  
     p.post
   end
 end
