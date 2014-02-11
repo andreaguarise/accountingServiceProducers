@@ -11,6 +11,9 @@ class GenericResource < ActiveResource::Base
   self.format = :xml
 end
 
+class CloudRecord < GenericResource
+end
+
 
 class LocalRecord
   def initialize(records)
@@ -22,7 +25,7 @@ class OneRecordSSM < LocalRecord
   
   def print(record)
     "VMUUID: " + record['VMUUID'] + "\n" +
-    #"SiteName: " + + "\n" +
+    "SiteName: " + record['resourceName'] + "\n" +
     "MachineName: " + record['localVMID'] + "\n" +
     "LocalUserId: " + record['local_user'] + "\n" +
     "LocalGroupId: " + record['local_group'] + "\n" +
@@ -86,6 +89,7 @@ class OneRecordSSMFile < OneRecordSSM
       @@written = 0
       out = File.new("#{@dir}/#{self.generateFileName}","w")
       if out
+        out.syswrite("APEL-cloud-message: v0.2\n")
         while ( @@written < @limit.to_i)
           break if @records.empty?
           record = @records.pop
@@ -101,6 +105,64 @@ class OneRecordSSMFile < OneRecordSSM
     end
   end
   
+end
+
+class OneRecordJSON < LocalRecord
+  
+  
+  def post
+    puts @records.to_json
+  end
+  
+end
+
+class OneRecordXML < LocalRecord
+  
+  def post
+    puts @records.to_xml
+  end
+  
+end
+
+class OneRecordActiveResource < LocalRecord
+  
+  def recordMangle(r)
+    #mangling content of vector to expunge keys not accepted by rails api and fix inconsistencies
+    r.delete('cpuPercentage')
+    r.delete('cpuPercentageNormalized')
+    r.delete('resourceName')
+    r['networkOutBound'] = r['networkOutbound']
+    r.delete('networkOutbound')
+    r.delete('statusLiteral')
+  end
+  
+  def post
+    @records.each do |record|
+      recordMangle(record)
+      r = CloudRecord.new(record)
+      tries = 0
+      begin
+        tries += 1
+        r.save
+        if not r.valid?
+          puts r.errors.full_messages if options[:verbose]
+          recordBuff = CloudRecord.get(:search, :VMUUID => r.VMUUID )
+          newRecord = CloudRecord.find(recordBuff["id"])
+          newRecord.load(r.attributes)
+          newRecord.save
+        end
+      rescue Exception => e
+        puts "Error sending  #{r.VMUUID}:#{e.to_s}. Retrying" # if options[:verbose]
+        if ( tries < 2)
+          sleep(2**tries)
+          retry
+        else
+          puts "Could not send record #{r.VMUUID}."
+        end
+      end
+    end
+  end
+
 end
 
 class OneacctFile
@@ -126,7 +188,17 @@ class OpenNebulaStatus
   def initialize(state,lcm_state)
     @state = state
     @lcm_state = lcm_state
-    @state_ary = ['INIT','PENDING','HOLD','ACTIVE','STOPPED','SUSPENDED','DONE','FAILED','POWEROFF','UNDEFINED1','UNDEFINED2']
+    @state_ary = ['INIT',
+      'PENDING',
+      'HOLD',
+      'ACTIVE',
+      'STOPPED',
+      'SUSPENDED',
+      'DONE',
+      'FAILED',
+      'POWEROFF',
+      'UNDEFINED1',
+      'UNDEFINED2']
     @lcmstate_ary = ['LCM_INIT',
       'PROLOG',
       'BOOT',
@@ -236,6 +308,7 @@ class OpenNebulaJsonRecord
     ## VMUUID must be assured unique.
     buffer = @resourceName  + "/" + @jsonRecord["STIME"] + "/" +@jsonRecord["VM"]["ID"]
     rv['VMUUID'] = UUIDTools::UUID.md5_create(UUIDTools::UUID_DNS_NAMESPACE,buffer)
+    rv['resourceName'] = @resourceName
     rv
   end
 
@@ -313,8 +386,7 @@ class OpennebulaSensor
       opt.on( '-h', '--help', 'Print this screen') do
         puts opt
         exit
-      end
-   
+      end 
     end
 
     opt_parser.parse!
@@ -332,12 +404,12 @@ class OpennebulaSensor
       p = OneRecordSSMFile.new(records)
       p.limit = @options[:limit]
       p.dir = @options[:outputDir]
-    #when @options[:publisher_type] == "ActiveResource" then
-    #  OneRecord.site = @options[:uri]
-    #  OneRecord.headers['Authorization'] = "Token token=\"#{@options[:token]}\""
-    #  OneRecord.timeout = 5
-    #  OneRecord.proxy = ""
-    #  p = OneRecordActiveResource.new(time.to_i,tables,dbName)
+    when @options[:publisher_type] == "ActiveResource" then
+      CloudRecord.site = @options[:uri]
+      CloudRecord.headers['Authorization'] = "Token token=\"#{@options[:token]}\""
+      CloudRecord.timeout = 5
+      CloudRecord.proxy = ""
+      p = OneRecordActiveResource.new(records)
     else
       p =  nil
     end
