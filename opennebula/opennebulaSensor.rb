@@ -336,17 +336,17 @@ class OpennebulaSensor
   def getLineParameters
     
     opt_parser = OptionParser.new do |opt|
-      opt.banner = "Usage: record_post [OPTIONS]"
+      opt.banner = "Usage: opennebulaSensorMain.rb [OPTIONS]"
 
       @options[:verbose] = false
       opt.on( '-v', '--verbose', 'Output more information') do
         @options[:verbose] = true
       end
   
-      @options[:dryrun] = false
-        opt.on( '-d', '--dryrun', 'Do not talk to server') do
-        @options[:dryrun] = true
-      end
+      #@options[:dryrun] = false
+      #  opt.on( '-d', '--dryrun', 'Do not talk to server') do
+      #  @options[:dryrun] = true
+      #end
   
       @options[:uri] = nil
       opt.on( '-U', '--URI uri', 'URI to contact') do |uri|
@@ -364,12 +364,12 @@ class OpennebulaSensor
       end
       
       @options[:limit] = nil
-      opt.on( '-L', '--Limit limit', 'number of record per outpu file') do |limit|
+      opt.on( '-L', '--Limit limit', 'number of record per output file with ssmfile publisher') do |limit|
         @options[:limit] = limit
       end
       
       @options[:uri] = nil
-      opt.on( '-P', '--Publisher type', 'Publisher type') do |type|
+      opt.on( '-P', '--Publisher type', 'Publisher type {ssm,ssmfile,XML,JSON,ActiveResource}') do |type|
         @options[:publisher_type] = type  
       end
       
@@ -379,7 +379,7 @@ class OpennebulaSensor
       end
 
       @options[:token] = nil
-      opt.on( '-t', '--token token', 'Authorization token that must be obtained from the service administrator') do |token|
+      opt.on( '-t', '--token token', 'Authorization token (needed only with FAUST ActiveResource backend). Must be requested to the service administrator') do |token|
        @options[:token] = token
       end
 
