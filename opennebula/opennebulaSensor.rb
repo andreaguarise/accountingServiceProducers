@@ -24,6 +24,11 @@ end
 class OneRecordSSM < LocalRecord
   
   def print(record)
+    if record['statusSSM'] == "completed"
+      endBuff = "EndTime: " + record['endTime'].to_i.to_s + "\n"
+    else
+      endBuff = ""
+    end
     "VMUUID: " + record['VMUUID'] + "\n" +
     "SiteName: " + record['resourceName'] + "\n" +
     "MachineName: " + record['localVMID'] + "\n" +
@@ -31,9 +36,9 @@ class OneRecordSSM < LocalRecord
     "LocalGroupId: " + record['local_group'] + "\n" +
     "GlobaUserName: " + "" + "\n" +
     "FQAN: " + "" + "\n" +
-    "Status: " + record['statusLiteral']+ "\n" + ##FIXME Need status table opennebula --> apel
+    "Status: " + record['statusSSM']+ "\n" + 
     "StarTime: " + record['startTime'].to_i.to_s + "\n" +
-    "EndTime: " + record['endTime'].to_i.to_s + "\n" + #FIXME set in ssm record just if status == completed
+    endBuff +
     "SuspendDuration: " + "" + "\n" +
     "WallDuration: " + record['wallDuration'].to_i.to_s + "\n" +
     "CpuDuration: " +  record['cpuDuration'].to_i.to_s + "\n" + #Check validity of this number! It is inferred from percentage of CPU consupmption
@@ -236,7 +241,48 @@ class OpenNebulaStatus
     end  
   end
   
-  
+  def to_ssm
+    started = ['INIT',
+      'PENDING',
+      'HOLD',
+      'ACTIVE',
+      'LCM_INIT',
+      'PROLOG',
+      'BOOT',
+      'RUNNING',
+      'MIGRATE',
+      'SAVE_STOP',
+      'SAVE_SUSPEND',
+      'SAVE_MIGRATE',
+      'PROLOG_MIGRATE',
+      'PROLOG_RESUME',
+      'EPILOG_STOP',
+      'EPILOG',
+      'BOOT_UNKNOWN',
+      'BOOT_POWEROFF',
+      'BOOT_SUSPENDED',
+      'BOOT_STOPPED'
+      ]
+    suspended = ['SUSPENDED']
+    completed = ['DONE',
+      'FAILED',
+      'POWEROFF',
+      'SHUTDOWN',
+      'CANCEL',
+      'FAILURE',
+      'CLEANUP']
+    s = case 
+    when started.include?(self.to_s) 
+      "started"
+    when suspended.include?(self.to_s)
+      "suspended"
+    when completed.include?(self.to_s)
+      "completed"
+    else
+      "one:#{self.to_s}"
+    end
+    s
+  end
   
 end
 
@@ -285,6 +331,7 @@ class OpenNebulaJsonRecord
     rv['status'] = @jsonRecord['VM']['STATE'] + ":" + @jsonRecord['VM']['LCM_STATE']
     state = OpenNebulaStatus.new(@jsonRecord['VM']['STATE'],@jsonRecord['VM']['LCM_STATE'])
     rv['statusLiteral'] = state.to_s
+    rv['statusSSM'] = state.to_ssm
     #rv['storageRecordId'] = @jsonRecord['u']
     #rv['suspendDuration'] = @jsonRecord['v']
 
