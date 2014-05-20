@@ -9,31 +9,91 @@ values = {}
 
 class SSMrecord
   def initialize(row)
-    
+    @row = row
   end
   
-  def get
-    
+  def machineName
+    if /^(.*):.*$/.match(@row['gridResource'])
+      $1
+    end  
+  end
+  
+  def queue
+    if /^.*:(.*)$/.match(@row['gridResource'])
+      $1
+    end
+  end
+  
+  def userFQAN
+    @row['userFqan']
+  end
+  
+  def VOGroup
+    ""
+  end
+  
+  def VORole
+    ""
+  end
+  
+  def processors
+    ""
+  end
+  
+  def nodeCount
+    ""
+  end
+  
+  def infrastructureDescription
+    ""
+  end
+  
+  def infrastructureType
+    ""  
+  end
+   
+  def to_s
+    out = ""
+    out += "Site: " + @row['siteName'] + "\n"
+    out += "SubmitHost: " + @row['gridResource'] + "\n"
+    out += "MachineName: " + self.machineName + "\n"
+    out += "Queue: " + self.queue + "\n"
+    out += "LocalJobId: " + @row['lrmsId'] + "\n"
+    out += "LocalUserId: " + @row['localUserId'] + "\n"
+    out += "GlobalUserName: " + @row['gridUser'] + "\n"
+    out += "FQAN: " + self.userFQAN + "\n"
+    out += "VO: " + @row['userVo'] + "\n"
+    out += "VOGroup: " + self.VOGroup + "\n"
+    out += "VORole: " + self.VORole + "\n"
+    out += "WallDuration: " + @row['wallTime'] + "\n"
+    out += "CpuDuration: " + @row['cpuTime'] + "\n"
+    out += "Processors: " + self.processors + "\n"
+    out += "NodeCount: " + self.nodeCount + "\n"
+    out += "StartTime: " + @row['start'] + "\n"
+    out += "EndTime: " + @row['end'] + "\n"
+    out += "InfrastructureDescription: " + self.infrastructureDescription + "\n"
+    out += "InfrastructureType: " + self.infrastructureType + "\n"
+    out += "MemoryReal: " + @row['pmem'] + "\n"
+    out += "MemoryVirtual: " + @row['vmem'] + "\n"
+    out += "ServiceLevelType: " + @row['iBenchType'] + "\n"
+    out += "ServiceLevel: " + @row['iBench'] + "\n"
+    out += "%%\n"
   end
 end
 
 class SSMmessage
-  @@message = ""
   def initialize(dir,file)
     @dir = dir
     @file = file
+    @message = "APEL-individual-job-message: v0.3\n"
   end
   
-  def open
-    
-  end
-  
-  def addRecord
-    
+  def addRecord(r)
+    @message += r.to_s
   end
   
   def write
-    
+    puts @message
   end
   
 end
@@ -99,7 +159,7 @@ opt_parser = OptionParser.new do |opt|
   end
   
   options[:dir] = nil
-  opt.on( '-D', '--Dir dir', 'Output dir to store SSM files') do |uri|
+  opt.on( '-D', '--Dir dir', 'Output dir to store SSM files') do |dir|
     options[:dir] = dir
   end
   
@@ -132,17 +192,24 @@ begin
   current_id = r[0]
 	stop_id = values['stop_id'] if values['stop_id']
 	current_id = values['start_id'] if values['start_id']
-	threads = values['threads'].to_i + 1
-	thread_counter = 0
 	puts "Start from #{current_id}, stop at #{stop_id}"
-	until current_id > stop_id
+	until current_id.to_i > stop_id.to_i
 		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} LIMIT #{values['limit']}")
 		n_rows = rs.num_rows
 		i = 0
 		rs.each_hash do |row|
-		###COMPOSE AND WRITE MESSAGESE HERE
+		  ###COMPOSE AND WRITE MESSAGESE HERE
+		  record_counter = 0
+		  message = SSMmessage.new(options[:dir],"file")
+		  while  record_counter < options[:num].to_i do
+		     record_counter = record_counter +1
+		     record = SSMrecord.new(row)
+		     message.addRecord(record)
+		     current_id = row['id']
+		     puts "current_id:#{current_id}, going to #{stop_id}"
+		  end
+		  message.write
 		end
-		
 	end
 
 rescue Mysql::Error => e
