@@ -7,6 +7,35 @@ require 'mysql'
 options = {}
 values = {}
 
+class DirQ  
+  def initialize(parent)
+    @parent=parent
+  end
+  
+  def dir
+    dir = "DEADBEEF"
+    if (!File.directory? "#{@parent}/#{dir}")
+      Dir.mkdir "#{@parent}/#{dir}"
+    end
+    dir
+  end
+  
+  def RandomExa(length, chars = 'abcdef0123456789')
+        rnd_str = ''
+        length.times { rnd_str << chars[rand(chars.size)] }
+        rnd_str
+  end
+  
+  def file
+    time = Time.now.to_i
+    timeHex = time.to_s(16)
+    random_string = self.RandomExa(6)
+    filename = timeHex + random_string
+    filename
+  end
+  
+end
+
 class SSMrecord
   def initialize(row)
     @row = row
@@ -29,11 +58,19 @@ class SSMrecord
   end
   
   def VOGroup
-    ""
+    if /^(.*?)\/Role=.*?$/.match(@row['userFqan']) 
+      $1
+    else
+      ""
+    end
   end
   
   def VORole
-    ""
+    if /^.*?\/Role=(.*?)\/.*?$/.match(@row['userFqan']) 
+      "Role=#{$1}"
+    else
+      ""
+    end
   end
   
   def processors
@@ -92,8 +129,8 @@ class SSMmessage
     @message += r.to_s
   end
   
-  def write
-    puts @message
+  def write   
+    open("#{@dir}/#{@file}", "a") { |f| f << @message }
   end
   
 end
@@ -194,22 +231,19 @@ begin
 	current_id = values['start_id'] if values['start_id']
 	puts "Start from #{current_id}, stop at #{stop_id}"
 	until current_id.to_i > stop_id.to_i
-		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} LIMIT #{values['limit']}")
+		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} LIMIT #{options[:num]}")
 		n_rows = rs.num_rows
-		i = 0
+		dirq= DirQ.new(options[:dir])
+    filename = dirq.dir + "/" + dirq.file
+		message = SSMmessage.new(options[:dir],filename)
 		rs.each_hash do |row|
-		  ###COMPOSE AND WRITE MESSAGESE HERE
-		  record_counter = 0
-		  message = SSMmessage.new(options[:dir],"file")
-		  while  record_counter < options[:num].to_i do
-		     record_counter = record_counter +1
-		     record = SSMrecord.new(row)
-		     message.addRecord(record)
-		     current_id = row['id']
-		     puts "current_id:#{current_id}, going to #{stop_id}"
-		  end
-		  message.write
+		  ###COMPOSE AND WRITE MESSAGESE HERE  
+		  record = SSMrecord.new(row)
+		  message.addRecord(record)
+		  current_id = row['id']   
 		end
+		message.write
+    puts "current_id:#{current_id}, going to #{stop_id} in #{filename}"
 	end
 
 rescue Mysql::Error => e
