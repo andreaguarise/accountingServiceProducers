@@ -252,5 +252,4 @@ rescue Mysql::Error => e
 ensure
 	con.close if con
 end
-puts
 
