@@ -135,6 +135,37 @@ class SSMmessage
   
 end
 
+class HlrSiteResource
+  def initialize
+    @h = {} #hash with gridResource stripped to hostname (the publisher) as key and siteName as value 
+  end
+  
+  def addItem(gridResource,siteName)
+    if !@h.has_key?(gridResource)
+      @h[self.publisher(gridResource)] = siteName
+    end
+  end
+  
+  def resource(gridSite)
+    "#{gridSite}-grid-CE"
+  end
+  
+  def publisher(gridResource)
+    if /^(.*):.*$/.match(gridResource)
+      $1
+    end  
+  end
+  
+  def faustPost()
+    puts "Posting on FAUST:"
+    @h.each do |k,v|
+    puts "#{k} --> #{self.resource(v)} --> #{v}"
+    end
+    puts
+    puts
+  end
+end
+
 class HlrDbRow
 	def initialize(row)
 		@row = row
@@ -231,18 +262,26 @@ begin
 	current_id = values['start_id'] if values['start_id']
 	puts "Start from #{current_id}, stop at #{stop_id}"
 	until current_id.to_i > stop_id.to_i
+	  
 		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} LIMIT #{options[:num]}")
 		n_rows = rs.num_rows
 		dirq= DirQ.new(options[:dir])
     filename = dirq.dir + "/" + dirq.file
 		message = SSMmessage.new(options[:dir],filename)
+		resourceSite = HlrSiteResource.new
 		rs.each_hash do |row|
 		  ###COMPOSE AND WRITE MESSAGESE HERE  
 		  record = SSMrecord.new(row)
 		  message.addRecord(record)
-		  current_id = row['id']   
+		  current_id = row['id'] 
+		  #FIND hlr:siteName,gridResource and produce faust:site,resource,publisher
+		  resourceSite.addItem(row['gridResource'],row['siteName']) 
 		end
-		message.write
+		#then use FAUST rest api to create site,resource,publisher on faust before writing record down to the broker 
+		resourceSite.faustPost
+		if !options[:dryrun] 
+		  message.write
+		end
     puts "current_id:#{current_id}, going to #{stop_id} in #{filename}"
 	end
 
