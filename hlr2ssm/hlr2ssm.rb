@@ -3,9 +3,25 @@ require 'rubygems'
 require 'optparse'
 require 'json'
 require 'mysql'
+require 'active_resource'
 
 options = {}
 values = {}
+
+class GenericResource < ActiveResource::Base
+  self.format = :xml
+end
+
+class Publisher < GenericResource
+end
+
+class Resource < GenericResource
+end 
+
+class Site < GenericResource
+end 
+
+
 
 class DirQ  
   def initialize(parent)
@@ -156,10 +172,64 @@ class HlrSiteResource
     end  
   end
   
-  def faustPost()
+  def site_to_h(name)
+    rh = {}
+    rh['name'] = name
+    rh['description'] = "Addded by hlr2ssm"
+    rh
+  end
+  
+  def resource_to_h(site)
+    rh = {}
+    rh['name'] = self.resource(site)
+    rh['site_name'] = site
+    rh['resource_type_name'] = "Farm_grid+local"
+    rh
+  end
+  
+  def publisher_to_h(gridResource,gridSite)
+    rh = {}
+    rh['hostname'] = gridResource
+    rh['resource_name'] = self.resource(gridSite)
+    rh['ip'] = "0.0.0.0"
+    rh
+  end
+  
+  def faustPost(uri,token)
+    Site.site = uri
+    Site.headers['Authorization'] = "Token token=\"#{token}\""
+    Site.timeout = 5
+    Site.proxy = ""
+    Resource.site = uri
+    Resource.headers['Authorization'] = "Token token=\"#{token}\""
+    Resource.timeout = 5
+    Resource.proxy = ""
+    Publisher.site = uri
+    Publisher.headers['Authorization'] = "Token token=\"#{token}\""
+    Publisher.timeout = 5
+    Publisher.proxy = ""
     puts "Posting on FAUST:"
     @h.each do |k,v|
-    puts "#{k} --> #{self.resource(v)} --> #{v}"
+      puts "#{k} --> #{self.resource(v)} --> #{v}"
+      puts self.site_to_h(v).to_json
+      site = Site.new(self.site_to_h(v))
+      resource = Resource.new(self.resource_to_h(v))
+      publisher = Publisher.new(self.publisher_to_h(k,v))
+      tries = 0
+      begin
+        tries += 1
+        site.save
+        resource.save
+        publisher.save
+      rescue Exception => e
+        puts "Error sending  #{v}:#{e.to_s}. Retrying" # if options[:verbose]
+        if ( tries < 2)
+          sleep(2**tries)
+          retry
+        else
+          puts "Could not send record #{v}."
+        end
+      end
     end
     puts
     puts
@@ -235,6 +305,16 @@ opt_parser = OptionParser.new do |opt|
   opt.on( '-n', '--num num', 'num records per message') do |num|
     options[:num] = num
   end
+  
+  options[:uri] = nil
+      opt.on( '-U', '--URI uri', 'URI to contact') do |uri|
+        options[:uri] = uri
+      end
+  
+  options[:token] = nil
+  opt.on( '-t', '--token token', 'Authorization token that must be obtained from the service administrator') do |token|
+       options[:token] = token
+  end
 
   opt.on( '-h', '--help', 'Print this screen') do
     puts opt
@@ -278,7 +358,7 @@ begin
 		  resourceSite.addItem(row['gridResource'],row['siteName']) 
 		end
 		#then use FAUST rest api to create site,resource,publisher on faust before writing record down to the broker 
-		resourceSite.faustPost
+		resourceSite.faustPost(options[:uri],options[:token])
 		if !options[:dryrun] 
 		  message.write
 		end
