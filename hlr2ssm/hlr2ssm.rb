@@ -29,7 +29,7 @@ class DirQ
   end
   
   def dir
-    dir = "DEADBEEF"
+    dir = "deadbeef"
     if (!File.directory? "#{@parent}/#{dir}")
       Dir.mkdir "#{@parent}/#{dir}"
     end
