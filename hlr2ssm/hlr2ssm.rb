@@ -90,11 +90,13 @@ class SSMrecord
   end
   
   def processors
-    ""
+    count = 1 + @row['executingNodes'].count('+')
+    count.to_s
   end
   
   def nodeCount
-    ""
+    count = 1 + @row['executingNodes'].count('+')
+    count.to_s
   end
   
   def infrastructureDescription
@@ -208,10 +210,9 @@ class HlrSiteResource
     Publisher.headers['Authorization'] = "Token token=\"#{token}\""
     Publisher.timeout = 5
     Publisher.proxy = ""
-    puts "Posting on FAUST:"
     @h.each do |k,v|
-      puts "#{k} --> #{self.resource(v)} --> #{v}"
-      puts self.site_to_h(v).to_json
+      #puts "#{k} --> #{self.resource(v)} --> #{v}"
+      #puts self.site_to_h(v).to_json
       site = Site.new(self.site_to_h(v))
       resource = Resource.new(self.resource_to_h(v))
       publisher = Publisher.new(self.publisher_to_h(k,v))
@@ -231,8 +232,6 @@ class HlrSiteResource
         end
       end
     end
-    puts
-    puts
   end
 end
 
