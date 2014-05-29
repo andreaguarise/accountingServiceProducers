@@ -342,7 +342,7 @@ begin
 	puts "Start from #{current_id}, stop at #{stop_id}"
 	until current_id.to_i > stop_id.to_i
 	  
-		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} LIMIT #{options[:num]}")
+		rs = con.query("SELECT * FROM jobTransSummary WHERE id > #{current_id} ORDER BY id LIMIT #{options[:num]}")
 		n_rows = rs.num_rows
 		dirq= DirQ.new(options[:dir])
     filename = dirq.dir + "/" + dirq.file
