@@ -69,14 +69,14 @@ cat << EOF
 Duplicates messages created by apelclient before sending them through ssmsend
 
  OPTIONS:
-	-c, --apelclient     cmd-path   		the apelclient executable [/usr/bin/apelclient]
-	-C, --apelclientconf apel-config   		the apelclient config file [/etc/apel/client.cfg]
-	-s, --ssmsend		 cmd-path			the ssmsend executable [/usr/bin/ssmsend]
-	-S, --ssmsendconf    ssm-apel-config    ssm config file pointing to EGI broker [/etc/apel/sender.cfg]
-	-F, --ssmfaustconf   ssm-faust-config	ssm config file pointing to local broker [/etc/apel/sender.cfg]
-	-d, --apeldir		 path				path to standard apel message location [/var/spool/apel/outgoing]
-	-D, --faustdir		 path				path to directory used to store local copies of messages [/var/spool/faust/outgoing]
-	-h, --help								this help.
+	-c, --apelclient     cmd-path        the apelclient executable [/usr/bin/apelclient]
+	-C, --apelclientconf apel-config     the apelclient config file [/etc/apel/client.cfg]
+	-s, --ssmsend        cmd-path        the ssmsend executable [/usr/bin/ssmsend]
+	-S, --ssmsendconf    ssm-apel-conf   ssm config file pointing to EGI broker [/etc/apel/sender.cfg]
+	-F, --ssmfaustconf   ssm-faust-conf  ssm config file pointing to local broker [/etc/apel/sender.cfg]
+	-d, --apeldir        path            standard apel message location [/var/spool/apel/outgoing]
+	-D, --faustdir       path            directory used to store local copies of messages [/var/spool/faust/outgoing]
+	-h, --help                           this help.
 EOF
 
 exit 0
