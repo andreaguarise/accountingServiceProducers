@@ -63,8 +63,10 @@ while true ; do
 done
 
 if [ $HELP -eq 1 ]; then
-	echo -n "USAGE: ssm-dupl-send.sh [OPTIONS]
-				OPTIONS:"
+	echo -n 
+"USAGE: ssm-dupl-send.sh [OPTIONS]
+	OPTIONS:
+	-c --apelclient path -- OPTIONAL, full path to the apelclient command [DEFAULT: /usr/bin/apelclient]"
 fi
 
 if [ -e $APELCLIENT_EXECUTABLE ]; then
