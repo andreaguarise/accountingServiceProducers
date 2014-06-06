@@ -67,6 +67,7 @@ if [ $HELP -eq 1 ]; then
 "USAGE: ssm-dupl-send.sh [OPTIONS]
 	OPTIONS:
 	-c --apelclient path -- OPTIONAL, full path to the apelclient command [DEFAULT: /usr/bin/apelclient]"
+	exit 0
 fi
 
 if [ -e $APELCLIENT_EXECUTABLE ]; then
