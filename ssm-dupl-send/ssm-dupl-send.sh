@@ -12,15 +12,16 @@ APELDIR=/var/spool/apel/outgoing
 FAUSTDIR=/var/spool/faust/outgoing
 
 GOON=0
+HELP=0
 
 # read the options
-TEMP=`getopt -o c:C:s:S:F:d:D:  --long apelclient:,apelclientconf:,ssmsend:,ssmsendconf:,ssmfaustconf:,apeldir:,faustdir: -n 'test.sh' -- "$@"`
+TEMP=`getopt -o c:C:s:S:F:d:D:h  --long apelclient:,apelclientconf:,ssmsend:,ssmsendconf:,ssmfaustconf:,apeldir:,faustdir:,help -n 'test.sh' -- "$@"`
 eval set -- "$TEMP"
 
 # extract options and their arguments into variables.
 while true ; do
     case "$1" in
-        -b|--argb) ARG_B=1 ; shift ;;
+        -h|--help) HELP=1 ; shift ;;
         -c|--apelclient)
             case "$2" in
                 "") shift 2 ;;
@@ -60,6 +61,11 @@ while true ; do
         *) echo "Internal error!" ; exit 1 ;;
     esac
 done
+
+if [ $HELP -eq 1 ]
+	echo -n "USAGE: ssm-dupl-send.sh [OPTIONS]
+				"
+fi
 
 if [ -e $APELCLIENT_EXECUTABLE ]; then
         echo "Using apelclient executable in $APELCLIENT_EXECUTABLE"
