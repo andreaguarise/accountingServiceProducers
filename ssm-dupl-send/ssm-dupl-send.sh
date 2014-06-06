@@ -62,9 +62,9 @@ while true ; do
     esac
 done
 
-if [ $HELP -eq 1 ]
+if [ $HELP -eq 1 ]; then
 	echo -n "USAGE: ssm-dupl-send.sh [OPTIONS]
-				"
+				OPTIONS:"
 fi
 
 if [ -e $APELCLIENT_EXECUTABLE ]; then
