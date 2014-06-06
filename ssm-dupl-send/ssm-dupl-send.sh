@@ -1,4 +1,4 @@
-i#!/bin/bash
+#!/bin/bash
 
 #This script runs apel-client, then it duplicates the ssm records to a second directory path and uses
 #ssmsend two times, the first to send records directly to GOC and the second to another broker path.
